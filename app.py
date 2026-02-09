@@ -637,4 +637,5 @@ def handle_401(_):
 
 if __name__ == "__main__":
     ensure_storage()
-    app.run(debug=os.environ.get("FLASK_DEBUG", "0") == "1")
+    port = int(os.getenv("SERVER_PORT", 5000))
+    app.run(debug=os.environ.get("FLASK_DEBUG", "0") == "1", port=port, host="0.0.0.0")
