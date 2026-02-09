@@ -535,7 +535,24 @@ function setupRenameModal() {
 function setupSettingsPopup() {
   const btn = document.getElementById("settings-btn");
   const popup = document.getElementById("settings-popup");
+  const themeSelect = document.getElementById("theme-select");
+
   if (!btn || !popup) return;
+
+  const savedTheme = localStorage.getItem("theme");
+  if (themeSelect) {
+    themeSelect.value = savedTheme || "";
+    themeSelect.addEventListener("change", () => {
+      const theme = themeSelect.value;
+      if (theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        localStorage.setItem("theme", theme);
+      } else {
+        document.documentElement.removeAttribute("data-theme");
+        localStorage.removeItem("theme");
+      }
+    });
+  }
 
   const toggle = () => {
     const isHidden = popup.hidden;

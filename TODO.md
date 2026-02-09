@@ -2,11 +2,11 @@
 - [x] Show file sizes correctly
 - [x] Button to edit file names
 - [x] Improve loading & UI
+- [x] Add options for different themes
+- [x] Improve the Upload timestamp
 - [ ] Replace Google Fonts with local fonts
 - [ ] Improve login window
-- [ ] Add options for different themes
 - [ ] Encrypt files client sided (if possible)
-- [ ] Improve the Upload timestamp
 - [ ] Add a grid view
 - [ ] Add folders
 - [ ] Support Autofill for login (Proton doesn't work :sob:)
