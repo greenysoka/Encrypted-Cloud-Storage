@@ -1,0 +1,7 @@
+Flask
+cryptography
+pyotp
+qrcode
+Flask-Session
+filelock
+tomli; python_version < "3.11"

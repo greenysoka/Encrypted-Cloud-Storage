@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+
+.env
+config/.env
+
+instance/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.DS_Store
+
+storage/
