@@ -6,3 +6,5 @@ Flask-Session
 filelock
 tomli; python_version < "3.11"
 flask_limiter
+Werkzeug
+pillow
