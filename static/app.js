@@ -454,7 +454,34 @@ function setupDeleteModal() {
     }
   });
 
+  cancelBtn?.addEventListener("click", closeModal);
 
+  const handleDelete = async () => {
+    if (!pendingId) return;
+
+    try {
+      const res = await fetch(`/files/${pendingId}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) {
+        // Try to parse error message
+        try {
+          const payload = await res.json();
+          alert(payload.error || "Delete failed.");
+        } catch (e) {
+          alert("Delete failed.");
+        }
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed.");
+    }
+    closeModal();
+  };
+
+  confirmBtn?.addEventListener("click", handleDelete);
 }
 
 function setupRenameModal() {
