@@ -21,7 +21,7 @@
       <form id="unlock-form" class="stack" autocomplete="off">
         <label class="field">
           <span>Password</span>
-          <input id="password" type="password" placeholder="Enter your password" required />
+          <input id="password" type="password" placeholder="Enter your password" required autocomplete="{{ 'new-password' if setup_password else 'current-password' }}" />
         </label>
         {% if setup_password %}
         <div class="setup-config">

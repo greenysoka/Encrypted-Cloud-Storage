@@ -123,7 +123,7 @@ load_env_file()
 secret_key = os.environ.get(CFG["secret_key_env"])
 if not secret_key or secret_key == "change-me-please":
     raise RuntimeError(
-        f"Missing secret key! Please set env var {CFG['secret_key_env']} in config/.env or environment. safety first! 🛡️"
+        f"Missing secret key! Please set env var {CFG['secret_key_env']} in config/.env or environment!"
     )
 
 app.config.update(
