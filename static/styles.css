@@ -676,25 +676,6 @@ select:focus {
     min-height: 200px;
   }
 
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-  .actions {
-    width: 100%;
-  }
-
-  .actions .btn {
-    flex: 1;
-  }
-
-  .actions .btn.icon-btn {
-    flex: 0 0 40px;
-  }
-
   .file-card {
     flex-direction: column;
     align-items: flex-start;
