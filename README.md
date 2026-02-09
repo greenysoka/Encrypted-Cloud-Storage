@@ -29,6 +29,7 @@ Make sure you connect a domain that offers HTTPS (SSL) for your server.
     - Create `config/.env` and add:
       ```
       FLASK_SECRET_KEY=your-super-secret-key-here
+      SERVER_PORT=5000
       ```
     - Check out `config/config.toml` if you want to tweak storage limits or sessions.
 
@@ -37,7 +38,8 @@ Make sure you connect a domain that offers HTTPS (SSL) for your server.
     python app.py
     ```
     Open your browser and head to `http://127.0.0.1:5000` if hosted locally.
-    If you host it in a container, the code will automatically detect the port.
+    If you host it in a container, remove the SERVER_PORT from the .env file.
+    The code will then automatically detect the port.
 
 ## Usage
 
