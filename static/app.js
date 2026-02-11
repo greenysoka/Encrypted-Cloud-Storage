@@ -1275,6 +1275,8 @@ function setupSettingsPopup() {
   const btn = document.getElementById("settings-btn");
   const popup = document.getElementById("settings-popup");
   const themeSelect = document.getElementById("theme-select");
+  const saveBtn = document.getElementById("save-settings-btn");
+  const statusEl = document.getElementById("settings-status");
 
   if (!btn || !popup) return;
 
@@ -1289,6 +1291,51 @@ function setupSettingsPopup() {
       } else {
         document.documentElement.removeAttribute("data-theme");
         localStorage.removeItem("theme");
+      }
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      const maxUpload = document.getElementById("settings-max-upload")?.value;
+      const maxStorage = document.getElementById("settings-max-storage")?.value;
+      const sessionHours = document.getElementById("settings-session-hours")?.value;
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving...";
+      if (statusEl) statusEl.hidden = true;
+
+      try {
+        const res = await fetch("/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            max_upload_mb: maxUpload ? parseInt(maxUpload) : undefined,
+            max_storage_mb: maxStorage ? parseInt(maxStorage) : undefined,
+            session_hours: sessionHours ? parseInt(sessionHours) : undefined,
+          }),
+        });
+        const payload = await res.json();
+
+        if (res.ok && payload.ok) {
+          if (statusEl) {
+            statusEl.textContent = "Saved! Reloading...";
+            statusEl.hidden = false;
+            statusEl.classList.remove("error");
+          }
+          setTimeout(() => window.location.reload(), 800);
+        } else {
+          throw new Error(payload.error || "Failed to save");
+        }
+      } catch (err) {
+        console.error(err);
+        if (statusEl) {
+          statusEl.textContent = err.message || "Error saving settings";
+          statusEl.hidden = false;
+          statusEl.classList.add("error");
+        }
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Changes";
       }
     });
   }

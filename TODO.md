@@ -13,10 +13,12 @@
 - [x] Add percentage display for used storage
 - [x] Add a preview popup for images when thumbnail is clicked
 - [x] Long files need to be shortened displayed for responsive view
-- [ ] Add vault settings to popup in main page
-- [ ] Add naming functionality for vaults
-- [ ] Add multple delete functionality
-- [ ] Add a share button for files
+- [x] Add vault settings to popup in main page
+- [ ] Try to implement chunking to support larger files or file limits by hosting providers
 - [ ] Replace Google Fonts with local fonts
+- [ ] Add naming functionality for vaults
+- [ ] Add multple select/delete functionality
 - [ ] Add folders
+- [ ] Add a share button for files
 - [ ] API Access to support 3rd party apps
+- [ ] Maybe add a local client for Linux & Windows with mount feature for better file accessing

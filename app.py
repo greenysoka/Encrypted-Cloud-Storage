@@ -407,6 +407,9 @@ def index():
         used_mb=round(used_bytes / 1024 / 1024, 1),
         total_mb=total_mb,
         percent=percent,
+        max_upload_mb=CFG["max_upload_mb"],
+        max_storage_mb=CFG["max_storage_mb"],
+        session_hours=CFG["session_hours"],
     )
 
 
@@ -745,6 +748,57 @@ def rename_file(file_id: str):
         save_metadata(items, hpw)
     
     return jsonify({"ok": True, "name": new_full_name})
+
+
+@app.post("/settings")
+@limiter.limit("10 per minute")
+def update_settings():
+    require_unlocked()
+    data = request.get_json(silent=True) or request.form
+    
+    custom_config = {}
+    try:
+        if "max_upload_mb" in data:
+            val = int(data["max_upload_mb"])
+            if val < 1: val = 1
+            custom_config["max_upload_mb"] = val
+            
+        if "max_storage_mb" in data:
+            val = int(data["max_storage_mb"])
+            if val < 1: val = 1
+            custom_config["max_storage_mb"] = val
+            
+        if "session_hours" in data:
+            val = int(data["session_hours"])
+            if val < 1: val = 1
+            if val > 168: val = 168
+            custom_config["session_hours"] = val
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "Invalid values"}), 400
+
+    if not custom_config:
+         return jsonify({"ok": True})
+
+    existing_custom = {}
+    if CUSTOM_CONFIG_PATH.exists():
+        try:
+            existing_custom = json.loads(CUSTOM_CONFIG_PATH.read_text(encoding="utf-8"))
+        except:
+            pass
+            
+    existing_custom.update(custom_config)
+    
+    ensure_storage()
+    CUSTOM_CONFIG_PATH.write_text(json.dumps(existing_custom, indent=2), encoding="utf-8")
+    
+    for k, v in custom_config.items():
+        if k in CFG:
+            CFG[k] = type(CFG[k])(v)
+            
+    app.config["MAX_CONTENT_LENGTH"] = int(CFG["max_upload_mb"] * 1024 * 1024 * 1.4)
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=CFG["session_hours"])
+    
+    return jsonify({"ok": True})
 
 
 @app.errorhandler(401)

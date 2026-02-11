@@ -23,7 +23,7 @@
           </svg>
         </button>
         <div id="settings-popup" class="settings-popup" hidden>
-          <div class="settings-header">Vault Settings</div>
+          <div class="settings-header">Settings</div>
           <div class="settings-body">
             <div class="field">
               <label for="theme-select">Theme</label>
@@ -34,6 +34,22 @@
                 <option value="high-contrast">High Contrast</option>
               </select>
             </div>
+            <div class="field">
+              <label for="settings-max-upload">Max Upload (MB)</label>
+              <input id="settings-max-upload" type="number" value="{{ max_upload_mb }}" min="1">
+            </div>
+            <div class="field">
+              <label for="settings-max-storage">Max Storage (MB)</label>
+              <input id="settings-max-storage" type="number" value="{{ max_storage_mb }}" min="1">
+            </div>
+            <div class="field">
+              <label for="settings-session-hours">Session Timeout (Hours)</label>
+              <input id="settings-session-hours" type="number" value="{{ session_hours }}" min="1">
+            </div>
+            <div class="settings-actions">
+              <button id="save-settings-btn" class="btn primary small" type="button">Save Changes</button>
+            </div>
+            <div id="settings-status" class="hint" hidden></div>
           </div>
         </div>
       </div>
@@ -43,7 +59,7 @@
   <main class="vault">
     <section class="panel upload">
       <h2>Upload</h2>
-      <p class="sub">Drag & drop a file. It will be encrypted before storage.</p>
+      <p class="sub">Drag & drop one or multiple files. They will be encrypted before the upload.</p>
       <div id="drop-zone" class="drop-zone">
         <div class="drop-inner">
           <div class="drop-title">Drop files here</div>
@@ -175,7 +191,8 @@
     <div class="modal-card image-preview-card" role="dialog" aria-modal="true" aria-labelledby="image-preview-title">
       <div class="image-preview-header">
         <p id="image-preview-title" class="image-preview-title">Image Preview</p>
-        <button id="close-image-preview" class="btn icon-btn ghost" type="button" aria-label="Close image preview" title="Close">
+        <button id="close-image-preview" class="btn icon-btn ghost" type="button" aria-label="Close image preview"
+          title="Close">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
