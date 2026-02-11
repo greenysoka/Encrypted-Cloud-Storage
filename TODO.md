@@ -12,6 +12,7 @@
 - [x] Add caching functionality to frontend
 - [x] Add percentage display for used storage
 - [x] Add a preview popup for images when thumbnail is clicked
+- [ ] Long files need to be shortened displayed for responsive view
 - [ ] Add vault settings to popup in main page
 - [ ] Add naming functionality for vaults
 - [ ] Add multple delete functionality
