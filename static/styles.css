@@ -817,3 +817,8 @@ select:focus {
   min-width: 0;
   font-size: 0.8rem;
 }
+
+.sr-only {
+  position: absolute;
+  left: -9999px;
+}

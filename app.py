@@ -389,7 +389,7 @@ ensure_storage()
 @app.get("/")
 def index():
     if not is_unlocked():
-        return redirect(url_for("unlock"))
+        return redirect(url_for("login"))
     try:
         hpw = session["hpw"]
         items = load_metadata(hpw)
@@ -410,23 +410,66 @@ def index():
     )
 
 
-@app.get("/unlock")
-def unlock():
+@app.get("/login")
+def login():
     auth = load_auth()
-    setup_password = not auth
-    setup_totp = bool(auth) and not auth.get("totp_enc")
-    setup_required = setup_password or setup_totp
-    return render_template(
-        "unlock.html",
-        setup=setup_required,
-        setup_password=setup_password,
-        setup_totp=setup_totp,
-    )
+    if not auth:
+        return redirect(url_for("setup"))
+    if not auth.get("totp_enc"):
+        return redirect(url_for("setup"))
+    return render_template("login.html")
 
 
-@app.post("/unlock")
+@app.post("/login")
 @limiter.limit("20 per minute")
-def unlock_post():
+def login_post():
+    data = request.get_json(silent=True) or request.form
+    hpw = (data.get("hpw") or "").strip()
+    if len(hpw) != 64:
+        return jsonify({"ok": False, "error": "Invalid password hash"}), 400
+    totp_code = (data.get("totp") or "").strip()
+    client_time = data.get("client_time")
+    server_time_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    drift_sec = None
+    try:
+        if client_time is not None:
+            drift_sec = int((server_time_ms - int(client_time)) / 1000)
+    except (TypeError, ValueError):
+        drift_sec = None
+
+    auth = load_auth()
+    if not auth:
+        return jsonify({"ok": False, "error": "Setup required"}), 400
+
+    if not verify_password(hpw):
+        return jsonify({"ok": False, "error": "Invalid password"}), 403
+
+    if not totp_code:
+        return jsonify({"ok": False, "error": "Missing TOTP code"}), 400
+    try:
+        secret = get_totp_secret(auth, hpw)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid password"}), 403
+    if not pyotp.TOTP(secret).verify(totp_code, valid_window=TOTP_WINDOW):
+        return jsonify({"ok": False, "error": "Invalid TOTP code", "drift_sec": drift_sec}), 403
+
+    session["hpw"] = hpw
+    session.permanent = True
+    return jsonify({"ok": True})
+
+
+@app.get("/setup")
+def setup():
+    auth = load_auth()
+    if auth and auth.get("totp_enc"):
+        return redirect(url_for("login"))
+    setup_totp = bool(auth) and not auth.get("totp_enc")
+    return render_template("setup.html", setup_totp=setup_totp)
+
+
+@app.post("/setup")
+@limiter.limit("20 per minute")
+def setup_post():
     data = request.get_json(silent=True) or request.form
     hpw = (data.get("hpw") or "").strip()
     if len(hpw) != 64:
@@ -452,7 +495,7 @@ def unlock_post():
                     custom_config["max_storage_mb"] = int(data["max_storage_mb"])
                 if "session_hours" in data:
                     custom_config["session_hours"] = int(data["session_hours"])
-                
+
                 if custom_config:
                     ensure_storage()
                     CUSTOM_CONFIG_PATH.write_text(json.dumps(custom_config, indent=2), encoding="utf-8")
@@ -524,18 +567,7 @@ def unlock_post():
         session.pop("setup_totp", None)
         return jsonify({"ok": True})
 
-    if not totp_code:
-        return jsonify({"ok": False, "error": "Missing TOTP code"}), 400
-    try:
-        secret = get_totp_secret(auth, hpw)
-    except Exception:
-        return jsonify({"ok": False, "error": "Invalid password"}), 403
-    if not pyotp.TOTP(secret).verify(totp_code, valid_window=TOTP_WINDOW):
-        return jsonify({"ok": False, "error": "Invalid TOTP code", "drift_sec": drift_sec}), 403
-
-    session["hpw"] = hpw
-    session.permanent = True
-    return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "Already set up"}), 400
 
 
 @app.post("/logout")
@@ -712,7 +744,7 @@ def rename_file(file_id: str):
 @app.errorhandler(401)
 def handle_401(_):
     if request.accept_mimetypes.accept_html:
-        return redirect(url_for("unlock"))
+        return redirect(url_for("login"))
     return jsonify({"ok": False, "error": "Locked"}), 401
 
 

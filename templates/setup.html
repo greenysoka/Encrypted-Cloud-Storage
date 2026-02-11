@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="shell">
+    <header class="topbar">
+        <div class="brand">Encrypted Cloud</div>
+    </header>
+
+    <main class="panel center">
+        <div id="setup-root" class="panel-card" data-phase="{{ 'totp' if setup_totp else 'password' }}">
+            {% if setup_totp %}
+            <h1>Enable Two-Factor Authentication</h1>
+            <p class="sub">
+                Your password is already set. Add an authenticator app to complete setup.
+            </p>
+            {% else %}
+            <h1>Set Your Vault Password</h1>
+            <p class="sub">
+                Set this once. It is hashed and used to encrypt your files.
+                If you forget it, nothing can be recovered.
+            </p>
+            {% endif %}
+
+            <form id="setup-form" class="stack" method="post" action="/setup" autocomplete="off" data-form-type="other">
+
+                <label class="field">
+                    <span>Password</span>
+                    <input id="password" type="password" name="password" placeholder="Choose a strong password" required
+                        autocomplete="new-password" />
+                </label>
+
+                {% if not setup_totp %}
+                <div class="setup-config">
+                    <label class="field">
+                        <span>Max Upload (MB)</span>
+                        <input id="max-upload" type="number" value="200" min="1" />
+                    </label>
+                    <label class="field">
+                        <span>Max Storage (MB)</span>
+                        <input id="max-storage" type="number" value="1000" min="1" />
+                    </label>
+                    <label class="field">
+                        <span>Session Timeout (Hours)</span>
+                        <input id="session-hours" type="number" value="8" min="1" />
+                    </label>
+                </div>
+                {% endif %}
+
+                <div id="totp-setup" class="totp-setup" hidden>
+                    <div class="totp-card">
+                        <div class="totp-title">Scan QR Code</div>
+                        <img id="totp-qr" alt="TOTP QR code" />
+                    </div>
+                    <div class="totp-secret">
+                        <div class="totp-title">Manual Secret</div>
+                        <div id="totp-secret" class="totp-value"></div>
+                    </div>
+                </div>
+
+                <label id="totp-field" class="field" hidden>
+                    <span>Authenticator Code</span>
+                    <input id="totp-code" type="text" name="totp" inputmode="numeric" pattern="[0-9]*"
+                        placeholder="6-digit code" />
+                </label>
+
+                <button id="setup-cta" class="btn primary" type="submit">
+                    {% if setup_totp %}Continue{% else %}Set Password{% endif %}
+                </button>
+
+                <div id="setup-error" class="hint error" hidden></div>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}

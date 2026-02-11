@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="shell">
+    <header class="topbar">
+        <div class="brand">Encrypted Cloud</div>
+    </header>
+
+    <main class="panel center">
+        <div class="panel-card">
+            <h1>Login</h1>
+            <p class="sub">
+                Your password is never stored. A hash is used to unlock and decrypt your files.
+            </p>
+
+            <form id="login-form" class="stack" method="post" action="/login" autocomplete="on" data-form-type="login"
+                aria-label="Login">
+
+                <label class="field">
+                    <span>Password</span>
+                    <input id="password" type="password" name="password" placeholder="Enter your password" required
+                        autocomplete="current-password" />
+                </label>
+
+                <label class="field">
+                    <span>Authenticator Code</span>
+                    <input id="totp-code" type="text" name="totp" inputmode="numeric" pattern="[0-9]*"
+                        placeholder="6-digit code" autocomplete="one-time-code" />
+                </label>
+
+                <button id="login-cta" class="btn primary" type="submit">Unlock</button>
+
+                <div id="login-error" class="hint error" hidden></div>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}

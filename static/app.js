@@ -88,21 +88,69 @@ function setHint(el, message, isError = false) {
   el.classList.toggle("error", isError);
 }
 
-async function handleUnlock() {
-  const form = document.getElementById("unlock-form");
+async function handleLogin() {
+  const form = document.getElementById("login-form");
   if (!form) return;
   const passwordInput = document.getElementById("password");
-  const errorEl = document.getElementById("unlock-error");
-  const root = document.getElementById("unlock-root");
-  const totpField = document.getElementById("totp-field");
   const totpInput = document.getElementById("totp-code");
+  const errorEl = document.getElementById("login-error");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const password = passwordInput.value.trim();
+    if (!password) {
+      setHint(errorEl, "Enter your password.", true);
+      return;
+    }
+    const code = totpInput?.value.trim() || "";
+    if (!code) {
+      setHint(errorEl, "Enter your authenticator code.", true);
+      return;
+    }
+    setHint(errorEl, "Unlocking...");
+    try {
+      const hpw = await sha256Hex(password);
+      const res = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hpw, totp: code, client_time: Date.now() }),
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload.ok) {
+        let msg = payload.error || "Login failed";
+        if (payload.drift_sec !== undefined && payload.drift_sec !== null) {
+          msg += ` (Clock drift ~${payload.drift_sec}s)`;
+        }
+        setHint(errorEl, msg, true);
+        return;
+      }
+      sessionStorage.setItem('hpw', hpw);
+      window.location.href = "/";
+    } catch (err) {
+      setHint(errorEl, "Login failed. Try again.", true);
+    }
+  });
+}
+
+async function handleSetup() {
+  const form = document.getElementById("setup-form");
+  if (!form) return;
+  const root = document.getElementById("setup-root");
+  const passwordInput = document.getElementById("password");
+  const totpInput = document.getElementById("totp-code");
+  const totpField = document.getElementById("totp-field");
   const totpSetup = document.getElementById("totp-setup");
   const totpSecret = document.getElementById("totp-secret");
   const totpQr = document.getElementById("totp-qr");
-  const cta = document.getElementById("unlock-cta");
+  const cta = document.getElementById("setup-cta");
+  const errorEl = document.getElementById("setup-error");
 
-  const setupMode = root?.dataset.setup === "true";
-  let stage = setupMode ? "init" : "login";
+  const phase = root?.dataset.phase || "password";
+  let stage = phase === "totp" ? "confirm" : "init";
+
+  if (phase === "totp") {
+    if (totpField) totpField.hidden = false;
+  }
 
   const showSetupUI = (secret, qrData, message) => {
     if (totpField) totpField.hidden = false;
@@ -119,16 +167,6 @@ async function handleUnlock() {
     stage = "confirm";
   };
 
-  const showLoginUI = () => {
-    if (totpField) totpField.hidden = false;
-    if (totpSetup) totpSetup.hidden = true;
-    if (cta) cta.textContent = "Unlock";
-  };
-
-  if (!setupMode) {
-    showLoginUI();
-  }
-
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const password = passwordInput.value.trim();
@@ -143,7 +181,7 @@ async function handleUnlock() {
         return;
       }
     }
-    setHint(errorEl, stage === "init" ? "Preparing 2FA setup..." : "Unlocking...");
+    setHint(errorEl, stage === "init" ? "Preparing 2FA setup..." : "Setting up...");
     try {
       const hpw = await sha256Hex(password);
       const totp = totpInput?.value.trim() || "";
@@ -163,7 +201,7 @@ async function handleUnlock() {
           session_hours: sessionHours ? parseInt(sessionHours) : 8
         };
       }
-      const res = await fetch("/unlock", {
+      const res = await fetch("/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -174,7 +212,7 @@ async function handleUnlock() {
         return;
       }
       if (!res.ok || !payload.ok) {
-        let msg = payload.error || "Unlock failed";
+        let msg = payload.error || "Setup failed";
         if (payload.drift_sec !== undefined && payload.drift_sec !== null) {
           msg += ` (Clock drift ~${payload.drift_sec}s)`;
         }
@@ -184,7 +222,7 @@ async function handleUnlock() {
       sessionStorage.setItem('hpw', hpw);
       window.location.href = "/";
     } catch (err) {
-      setHint(errorEl, "Unlock failed. Try again.", true);
+      setHint(errorEl, "Setup failed. Try again.", true);
     }
   });
 }
@@ -274,7 +312,7 @@ function setupLockButton() {
   lockBtn.addEventListener("click", async () => {
     sessionStorage.removeItem('hpw');
     await fetch("/logout", { method: "POST" });
-    window.location.href = "/unlock";
+    window.location.href = "/login";
   });
 }
 
@@ -790,7 +828,8 @@ function setupSettingsPopup() {
   });
 }
 
-handleUnlock();
+handleLogin();
+handleSetup();
 setupDropZone();
 setupLockButton();
 setupFilters();
