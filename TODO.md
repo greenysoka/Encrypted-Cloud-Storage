@@ -17,8 +17,9 @@
 - [x] Replace Google Fonts with local fonts
 - [x] Try to implement chunking to support larger files or file limits by hosting providers
 - [x] Add folders
+- [x] Add multple select/delete functionality
+- [x] Add color theme to global settings instead of browser cache
 - [ ] Add naming functionality for vaults
-- [ ] Add multple select/delete functionality
 - [ ] Add a share button for files
 - [ ] API Access to support 3rd party apps
 - [ ] Maybe add a local client for Linux & Windows with mount feature for better file accessing

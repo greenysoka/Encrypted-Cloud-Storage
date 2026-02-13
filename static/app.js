@@ -1070,6 +1070,12 @@ function renderFolderCards(folders, container) {
 
     card.addEventListener('click', (e) => {
       if (e.target.closest('.file-menu')) return;
+      if (window._isSelectionMode) {
+        e.preventDefault();
+        e.stopPropagation();
+        window._toggleSelectCard(card);
+        return;
+      }
       navigateToFolder(folder.id, folder.display_name || 'Folder');
     });
 
@@ -1156,6 +1162,13 @@ function renderFileList(files, container) {
         console.error(err);
         alert('Download or decryption failed.');
       }
+    });
+
+    card.addEventListener('click', (e) => {
+      if (!window._isSelectionMode) return;
+      if (e.target.closest('.file-menu') || e.target.closest('.select-cb')) return;
+      e.preventDefault();
+      window._toggleSelectCard(card);
     });
 
     container.appendChild(clone);
@@ -1935,3 +1948,286 @@ setupMoveModal();
 if (document.getElementById('file-list')) {
   fetchFiles();
 }
+
+function setupSelectionMode() {
+  const selectBtn = document.getElementById('select-mode-btn');
+  const fileList = document.getElementById('file-list');
+  const toolbar = document.getElementById('batch-toolbar');
+  const countEl = document.getElementById('batch-count');
+  const selectAllBtn = document.getElementById('batch-select-all');
+  const batchDeleteBtn = document.getElementById('batch-delete-btn');
+  const batchMoveBtn = document.getElementById('batch-move-btn');
+
+  const batchModal = document.getElementById('batch-delete-modal');
+  const batchMsg = document.getElementById('batch-delete-message');
+  const confirmBatchDelete = document.getElementById('confirm-batch-delete');
+  const cancelBatchDelete = document.getElementById('cancel-batch-delete');
+
+  if (!selectBtn || !fileList) return;
+
+  const selectedItems = new Set();
+  window._isSelectionMode = false;
+
+  const updateToolbar = () => {
+    const count = selectedItems.size;
+    if (toolbar) {
+      toolbar.hidden = !window._isSelectionMode;
+    }
+    if (countEl) {
+      countEl.textContent = `${count} selected`;
+    }
+    if (batchDeleteBtn) batchDeleteBtn.disabled = count === 0;
+    if (batchMoveBtn) batchMoveBtn.disabled = count === 0;
+
+    const allCards = fileList.querySelectorAll('.file-card');
+    const allSelected = allCards.length > 0 && allCards.length === count;
+    if (selectAllBtn) {
+      selectAllBtn.textContent = allSelected ? 'Deselect All' : 'Select All';
+    }
+  };
+
+  const toggleSelectCard = (card) => {
+    const id = card.dataset.fileId || card.dataset.folderId;
+    if (!id) return;
+    const cb = card.querySelector('.select-cb');
+    if (selectedItems.has(id)) {
+      selectedItems.delete(id);
+      card.classList.remove('selected');
+      if (cb) cb.checked = false;
+    } else {
+      selectedItems.add(id);
+      card.classList.add('selected');
+      if (cb) cb.checked = true;
+    }
+    updateToolbar();
+  };
+
+  window._toggleSelectCard = toggleSelectCard;
+
+  const enterSelectionMode = () => {
+    window._isSelectionMode = true;
+    fileList.classList.add('selection-mode');
+    selectBtn.classList.add('active');
+    selectBtn.title = 'Exit selection';
+    updateToolbar();
+  };
+
+  const exitSelectionMode = () => {
+    window._isSelectionMode = false;
+    fileList.classList.remove('selection-mode');
+    selectBtn.classList.remove('active');
+    selectBtn.title = 'Select items';
+    selectedItems.clear();
+    fileList.querySelectorAll('.file-card.selected').forEach(c => c.classList.remove('selected'));
+    fileList.querySelectorAll('.select-cb').forEach(cb => { cb.checked = false; });
+    if (toolbar) toolbar.hidden = true;
+  };
+
+  selectBtn.addEventListener('click', () => {
+    if (window._isSelectionMode) {
+      exitSelectionMode();
+    } else {
+      enterSelectionMode();
+    }
+  });
+
+  fileList.addEventListener('change', (e) => {
+    if (!window._isSelectionMode) return;
+    const cb = e.target.closest('.select-cb');
+    if (!cb) return;
+    const card = cb.closest('.file-card');
+    if (!card) return;
+    const id = card.dataset.fileId || card.dataset.folderId;
+    if (!id) return;
+    if (cb.checked) {
+      selectedItems.add(id);
+      card.classList.add('selected');
+    } else {
+      selectedItems.delete(id);
+      card.classList.remove('selected');
+    }
+    updateToolbar();
+  });
+
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', () => {
+      const allCards = fileList.querySelectorAll('.file-card');
+      const allSelected = allCards.length > 0 && allCards.length === selectedItems.size;
+      if (allSelected) {
+        selectedItems.clear();
+        allCards.forEach(card => {
+          card.classList.remove('selected');
+          const cb = card.querySelector('.select-cb');
+          if (cb) cb.checked = false;
+        });
+      } else {
+        allCards.forEach(card => {
+          const id = card.dataset.fileId || card.dataset.folderId;
+          if (id) {
+            selectedItems.add(id);
+            card.classList.add('selected');
+            const cb = card.querySelector('.select-cb');
+            if (cb) cb.checked = true;
+          }
+        });
+      }
+      updateToolbar();
+    });
+  }
+
+  const closeBatchDeleteModal = () => {
+    if (batchModal) {
+      batchModal.classList.remove('is-open');
+      batchModal.setAttribute('aria-hidden', 'true');
+    }
+  };
+
+  if (batchDeleteBtn) {
+    batchDeleteBtn.addEventListener('click', () => {
+      if (selectedItems.size === 0) return;
+      if (batchMsg) {
+        batchMsg.textContent = `Are you sure you want to delete ${selectedItems.size} item${selectedItems.size !== 1 ? 's' : ''}? This cannot be undone.`;
+      }
+      if (batchModal) {
+        batchModal.classList.add('is-open');
+        batchModal.setAttribute('aria-hidden', 'false');
+      }
+    });
+  }
+
+  cancelBatchDelete?.addEventListener('click', closeBatchDeleteModal);
+  batchModal?.querySelector('[data-close]')?.addEventListener('click', closeBatchDeleteModal);
+
+  if (confirmBatchDelete) {
+    confirmBatchDelete.addEventListener('click', async () => {
+      if (selectedItems.size === 0) return;
+      confirmBatchDelete.disabled = true;
+      confirmBatchDelete.textContent = 'Deleting...';
+      try {
+        const res = await fetch('/batch/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [...selectedItems] }),
+        });
+        if (res.status === 401) { localStorage.removeItem('hpw'); window.location.href = '/login'; return; }
+        const data = await res.json();
+        if (!data.ok) {
+          alert(data.error || 'Batch delete failed.');
+        } else {
+          closeBatchDeleteModal();
+          exitSelectionMode();
+          await fetchFiles();
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Batch delete failed.');
+      }
+      confirmBatchDelete.disabled = false;
+      confirmBatchDelete.textContent = 'Delete All';
+    });
+  }
+
+  if (batchMoveBtn) {
+    batchMoveBtn.addEventListener('click', () => {
+      if (selectedItems.size === 0) return;
+
+      const moveModal = document.getElementById('move-modal');
+      const folderList = document.getElementById('move-folder-list');
+      const confirmMove = document.getElementById('confirm-move');
+      const cancelMove = document.getElementById('cancel-move');
+      const moveTitle = document.getElementById('move-title');
+      if (!moveModal || !folderList) return;
+
+      if (moveTitle) moveTitle.textContent = `Move ${selectedItems.size} item${selectedItems.size !== 1 ? 's' : ''}`;
+
+      let selectedTargetId = null;
+      folderList.innerHTML = '';
+
+      const rootBtn = document.createElement('button');
+      rootBtn.className = 'move-folder-item root-item selected';
+      rootBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> Root`;
+      rootBtn.addEventListener('click', () => {
+        folderList.querySelectorAll('.move-folder-item').forEach(b => b.classList.remove('selected'));
+        rootBtn.classList.add('selected');
+        selectedTargetId = null;
+      });
+      folderList.appendChild(rootBtn);
+
+      const folders = (window.folderData || []).filter(f => !selectedItems.has(f.id));
+      folders.forEach(folder => {
+        const btn = document.createElement('button');
+        btn.className = 'move-folder-item folder-item';
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> ${folder.display_name || 'Folder'}`;
+        btn.addEventListener('click', () => {
+          folderList.querySelectorAll('.move-folder-item').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          selectedTargetId = folder.id;
+        });
+        folderList.appendChild(btn);
+      });
+
+      moveModal.classList.add('is-open');
+      moveModal.setAttribute('aria-hidden', 'false');
+
+      const batchMoveHandler = async () => {
+        try {
+          const res = await fetch('/batch/move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ids: [...selectedItems],
+              target_folder_id: selectedTargetId || '',
+            }),
+          });
+          if (res.status === 401) { localStorage.removeItem('hpw'); window.location.href = '/login'; return; }
+          const data = await res.json();
+          if (!data.ok) {
+            alert(data.error || 'Move failed.');
+            return;
+          }
+          moveModal.classList.remove('is-open');
+          moveModal.setAttribute('aria-hidden', 'true');
+          exitSelectionMode();
+          await fetchFiles();
+        } catch (err) {
+          console.error(err);
+          alert('Move failed.');
+        }
+        confirmMove?.removeEventListener('click', batchMoveHandler);
+      };
+
+      const newConfirm = confirmMove.cloneNode(true);
+      confirmMove.parentNode.replaceChild(newConfirm, confirmMove);
+      newConfirm.addEventListener('click', batchMoveHandler);
+
+      const closeBatchMove = () => {
+        moveModal.classList.remove('is-open');
+        moveModal.setAttribute('aria-hidden', 'true');
+        newConfirm.removeEventListener('click', batchMoveHandler);
+        const restored = newConfirm.cloneNode(true);
+        restored.id = 'confirm-move';
+        newConfirm.parentNode.replaceChild(restored, newConfirm);
+        setupMoveModal();
+      };
+
+      const newCancel = cancelMove.cloneNode(true);
+      cancelMove.parentNode.replaceChild(newCancel, cancelMove);
+      newCancel.addEventListener('click', closeBatchMove);
+
+      const backdrop = moveModal.querySelector('[data-close]');
+      if (backdrop) {
+        const newBackdrop = backdrop.cloneNode(true);
+        backdrop.parentNode.replaceChild(newBackdrop, backdrop);
+        newBackdrop.addEventListener('click', closeBatchMove);
+      }
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && window._isSelectionMode) {
+      exitSelectionMode();
+    }
+  });
+}
+
+setupSelectionMode();

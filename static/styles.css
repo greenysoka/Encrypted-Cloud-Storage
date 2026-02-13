@@ -379,11 +379,20 @@ select:focus {
   font-weight: 500;
 }
 
-.filters {
+.toolbar {
   display: flex;
   gap: 12px;
   margin-bottom: 24px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.filters {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .search {
@@ -399,7 +408,14 @@ select:focus {
   display: flex;
   gap: 12px;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .filter-group select {
@@ -818,22 +834,19 @@ select:focus {
 
   .filter-group {
     width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
     align-items: center;
   }
 
-  .filter-group>* {
-    min-width: 0;
-  }
-
   .filter-group select {
-    width: 100%;
+    flex: 1 1 calc(50% - 10px);
     min-width: 0;
   }
 
-  #view-toggle {
-    justify-self: end;
+  .filter-buttons {
+    margin-left: auto;
   }
 
   .storage-labels {
@@ -864,6 +877,38 @@ select:focus {
 
   .panel {
     padding: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .storage {
+    order: 1;
+    margin-bottom: 15px;
+  }
+
+  .filters {
+    order: 2;
+    margin-bottom: 12px;
+  }
+
+  #breadcrumbs {
+    order: 3;
+    margin-bottom: 15px;
+  }
+
+  .filter-buttons {
+    order: 4;
+    margin-bottom: 20px;
+    align-self: flex-end;
+    margin-left: auto;
+  }
+
+  #file-list {
+    order: 5;
+  }
+
+  .toolbar {
+    display: contents;
   }
 
   .drop-zone {
@@ -897,23 +942,23 @@ select:focus {
   }
 
   .filter-group {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     width: 100%;
   }
 
-  .filter-group>* {
-    min-width: 0;
-  }
-
   .filter-group select {
-    width: 100%;
+    flex: 1 1 calc(50% - 10px);
     min-width: 0;
   }
 
-  #view-toggle {
-    justify-self: end;
+  .filter-group select#sort-by {
+    flex: 1 1 100%;
+  }
+
+  .filter-group .filter-buttons {
+    margin-left: auto;
   }
 
   .modal-actions {
@@ -1302,4 +1347,180 @@ select:focus {
 
 .move-folder-item.folder-item svg {
   color: var(--accent-hover);
+}
+
+
+.select-cb {
+  display: none;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  z-index: 5;
+  margin: 0;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: transparent;
+  transition: all 0.18s ease;
+}
+
+.select-cb:checked {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.select-cb:checked::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2.2px 2.2px 0;
+  transform: rotate(45deg);
+  margin: 1px auto 0;
+}
+
+.select-cb:hover {
+  border-color: var(--accent);
+}
+
+.file-list.selection-mode .select-cb {
+  display: block;
+}
+
+.file-list.selection-mode .file-card {
+  position: relative;
+  padding-left: 46px;
+  cursor: pointer;
+}
+
+.file-list.selection-mode.grid-view .file-card {
+  padding-left: 12px;
+  padding-top: 42px;
+}
+
+.file-list.selection-mode.grid-view .select-cb {
+  top: 12px;
+  left: 12px;
+}
+
+.file-card.selected {
+  border-color: var(--accent-hover);
+  background-color: rgba(16, 51, 125, 0.12);
+}
+
+#select-mode-btn.active {
+  background-color: var(--accent);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+
+.batch-toolbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  padding: 12px 20px;
+  background: rgba(9, 11, 17, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  animation: batchSlideUp 0.25s ease-out;
+}
+
+@keyframes batchSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.batch-toolbar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.batch-count {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.batch-actions .btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 650px) {
+  .batch-toolbar {
+    padding: 10px 16px;
+  }
+
+  .batch-toolbar-inner {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .batch-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .batch-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .file-list.selection-mode .file-card {
+    padding-left: 42px;
+  }
+
+  .select-cb {
+    top: 50%;
+    transform: translateY(-50%);
+    left: 10px;
+    width: 20px;
+    height: 20px;
+  }
+
+  .select-cb:checked::after {
+    width: 5px;
+    height: 9px;
+  }
+
+  .file-list.selection-mode.grid-view .select-cb {
+    top: 12px;
+    transform: none;
+  }
+}
+
+[data-theme="light"] .batch-toolbar {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+[data-theme="light"] .file-card.selected {
+  background-color: rgba(16, 51, 125, 0.06);
 }

@@ -1106,6 +1106,115 @@ def move_item(item_id: str):
     return jsonify({"ok": True})
 
 
+@app.post("/batch/delete")
+@limiter.limit("30 per minute")
+def batch_delete():
+    require_unlocked()
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"ok": False, "error": "Missing data"}), 400
+
+    ids = data.get("ids")
+    if not ids or not isinstance(ids, list):
+        return jsonify({"ok": False, "error": "Missing or invalid ids"}), 400
+
+    hpw = session["hpw"]
+    with FileLock(LOCK_PATH):
+        try:
+            items = load_metadata(hpw)
+        except ValueError:
+            abort(403)
+
+        all_ids_to_delete = set()
+        for item_id in ids:
+            meta = next((m for m in items if m.get("id") == item_id), None)
+            if not meta:
+                continue
+            if meta.get("type") == "folder":
+                queue = [item_id]
+                while queue:
+                    current = queue.pop()
+                    all_ids_to_delete.add(current)
+                    for it in items:
+                        parent = it.get("parent_id") or it.get("folder_id")
+                        if parent == current and it["id"] not in all_ids_to_delete:
+                            queue.append(it["id"])
+            else:
+                all_ids_to_delete.add(item_id)
+
+        for it in items:
+            if it["id"] in all_ids_to_delete and it.get("type") != "folder":
+                blob_path = STORAGE_DIR / f"{it['id']}.bin"
+                if blob_path.exists():
+                    try:
+                        blob_path.unlink()
+                    except OSError:
+                        pass
+
+        deleted = len(all_ids_to_delete)
+        items = [m for m in items if m["id"] not in all_ids_to_delete]
+        save_metadata(items, hpw)
+    return jsonify({"ok": True, "deleted": deleted})
+
+
+@app.post("/batch/move")
+@limiter.limit("30 per minute")
+def batch_move():
+    require_unlocked()
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"ok": False, "error": "Missing data"}), 400
+
+    ids = data.get("ids")
+    if not ids or not isinstance(ids, list):
+        return jsonify({"ok": False, "error": "Missing or invalid ids"}), 400
+
+    target_folder_id = (data.get("target_folder_id") or "").strip() or None
+    hpw = session["hpw"]
+
+    with FileLock(LOCK_PATH):
+        try:
+            items = load_metadata(hpw)
+        except ValueError:
+            abort(403)
+
+        if target_folder_id:
+            target = next((m for m in items if m.get("id") == target_folder_id and m.get("type") == "folder"), None)
+            if not target:
+                return jsonify({"ok": False, "error": "Target folder not found"}), 404
+
+        moved = 0
+        for item_id in ids:
+            meta = next((m for m in items if m.get("id") == item_id), None)
+            if not meta:
+                continue
+
+            if meta.get("type") == "folder":
+                if target_folder_id:
+                    check = target_folder_id
+                    is_circular = False
+                    while check:
+                        if check == item_id:
+                            is_circular = True
+                            break
+                        parent_item = next((m for m in items if m.get("id") == check), None)
+                        check = (parent_item.get("parent_id") if parent_item else None)
+                    if is_circular:
+                        continue
+                    meta["parent_id"] = target_folder_id
+                else:
+                    meta.pop("parent_id", None)
+            else:
+                if target_folder_id:
+                    meta["folder_id"] = target_folder_id
+                else:
+                    meta.pop("folder_id", None)
+            moved += 1
+
+        save_metadata(items, hpw)
+    return jsonify({"ok": True, "moved": moved})
+
+
 @app.post("/settings")
 @limiter.limit("10 per minute")
 def update_settings():
