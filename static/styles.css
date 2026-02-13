@@ -64,7 +64,8 @@
 
 body {
   margin: 0;
-  font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;;
+  font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+  ;
   color: var(--text);
   min-height: 100vh;
   background-color: var(--bg);
@@ -902,7 +903,7 @@ select:focus {
     width: 100%;
   }
 
-  .filter-group > * {
+  .filter-group>* {
     min-width: 0;
   }
 
@@ -1153,4 +1154,120 @@ select:focus {
     justify-content: flex-end;
     margin-top: 8px;
   }
+}
+
+
+.breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+
+.breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.breadcrumb-item:hover {
+  background: var(--panel-alt);
+  color: var(--text);
+}
+
+.breadcrumb-item.active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.breadcrumb-separator {
+  color: var(--muted);
+  font-size: 0.85rem;
+  opacity: 0.5;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+
+.folder-card {
+  cursor: pointer;
+}
+
+.folder-card:hover {
+  background-color: var(--panel-alt);
+}
+
+.folder-icon svg {
+  stroke: var(--text);
+}
+
+
+.move-folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.move-folder-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.move-folder-item:hover {
+  background: var(--panel-alt);
+}
+
+.move-folder-item.selected {
+  border-color: var(--accent-hover);
+  background: var(--accent);
+  color: white;
+}
+
+.move-folder-item svg {
+  flex-shrink: 0;
+}
+
+.move-folder-item.root-item svg {
+  color: var(--muted);
+}
+
+.move-folder-item.folder-item svg {
+  color: var(--accent-hover);
 }

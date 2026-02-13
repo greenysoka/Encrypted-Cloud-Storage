@@ -175,7 +175,7 @@ function updateSearchPlaceholder(totalFiles) {
     searchInput.placeholder = "Search files...";
     return;
   }
-  const suffix = count === 1 ? "file" : "files";
+  const suffix = count === 1 ? "item" : "items";
   searchInput.placeholder = `Search in ${count} ${suffix}...`;
 }
 
@@ -383,6 +383,7 @@ function setupDropZone() {
         mime: file.type || "application/octet-stream",
         size: plaintextSize,
         total_chunks: totalChunks,
+        folder_id: currentFolderId || "",
       }),
     });
     if (initRes.status === 401) { localStorage.removeItem('hpw'); window.location.href = '/login'; return; }
@@ -477,6 +478,7 @@ function setupDropZone() {
         mime: file.type || "application/octet-stream",
         size: plaintextSize,
         total_chunks: 1,
+        folder_id: currentFolderId || "",
       }));
     });
   };
@@ -623,8 +625,28 @@ function setupFilters() {
     const dateValue = dateFilter?.value || "all";
     const sizeValue = sizeFilter?.value || "all";
     const sortValue = sortBy?.value || "newest";
+    const emptyState = document.getElementById("empty-state");
+
+    let visibleFolders = (window.folderData || []).filter(f => {
+      const parentId = f.parent_id || null;
+      if (parentId !== currentFolderId) return false;
+      if (query) {
+        const name = (f.display_name || '').toLowerCase();
+        return name.includes(query);
+      }
+      return true;
+    });
+
+    visibleFolders.sort((a, b) => {
+      const nameA = (a.display_name || '').toLowerCase();
+      const nameB = (b.display_name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
 
     let visible = window.fileData.filter(file => {
+      const fileFolderId = file.folder_id || null;
+      if (fileFolderId !== currentFolderId) return false;
+
       const name = (file.display_name || file.alias || "").toLowerCase();
       const matchesQuery = !query || name.includes(query);
 
@@ -663,10 +685,20 @@ function setupFilters() {
       return dateB - dateA;
     });
 
+    const renderId = ++currentRenderId;
+    thumbnailQueue = [];
+    list.innerHTML = '';
+
+    renderFolderCards(visibleFolders, list);
     renderFileList(visible, list);
 
+    updateSearchPlaceholder(visible.length + visibleFolders.length);
+
     if (noResults) {
-      noResults.hidden = visible.length !== 0;
+      noResults.hidden = visible.length !== 0 || visibleFolders.length !== 0;
+    }
+    if (emptyState) {
+      emptyState.hidden = visible.length !== 0 || visibleFolders.length !== 0 || currentFolderId;
     }
   };
 
@@ -941,13 +973,116 @@ window.addEventListener('scroll', () => {
   localStorage.setItem('scrollY', window.scrollY);
 }, { passive: true });
 
+let currentFolderId = null;
+let folderPath = [];
+window.folderData = [];
+
+try {
+  const saved = JSON.parse(localStorage.getItem('folderState') || 'null');
+  if (saved && saved.id) {
+    currentFolderId = saved.id;
+    folderPath = saved.path || [];
+  }
+} catch (e) { }
+
+setTimeout(() => renderBreadcrumbs(), 0);
+
+function saveFolderState() {
+  localStorage.setItem('folderState', JSON.stringify({ id: currentFolderId, path: folderPath }));
+}
+
+function navigateToFolder(folderId, folderName) {
+  if (folderId === currentFolderId) return;
+
+  if (!folderId) {
+    currentFolderId = null;
+    folderPath = [];
+  } else {
+    const idx = folderPath.findIndex(f => f.id === folderId);
+    if (idx >= 0) {
+      folderPath = folderPath.slice(0, idx + 1);
+    } else {
+      folderPath.push({ id: folderId, name: folderName });
+    }
+    currentFolderId = folderId;
+  }
+
+  saveFolderState();
+  renderBreadcrumbs();
+  if (window.applyFilters) window.applyFilters();
+}
+
+function renderBreadcrumbs() {
+  const bar = document.getElementById('breadcrumb-bar');
+  if (!bar) return;
+  bar.innerHTML = '';
+
+  const rootBtn = document.createElement('button');
+  rootBtn.className = 'breadcrumb-item breadcrumb-root' + (!currentFolderId ? ' active' : '');
+  rootBtn.dataset.folderId = '';
+  rootBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> Root`;
+  rootBtn.addEventListener('click', () => navigateToFolder(null, null));
+  bar.appendChild(rootBtn);
+
+  folderPath.forEach((f, i) => {
+    const sep = document.createElement('span');
+    sep.className = 'breadcrumb-separator';
+    sep.textContent = '›';
+    bar.appendChild(sep);
+
+    const btn = document.createElement('button');
+    btn.className = 'breadcrumb-item' + (i === folderPath.length - 1 ? ' active' : '');
+    btn.dataset.folderId = f.id;
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> ${f.name}`;
+    btn.addEventListener('click', () => navigateToFolder(f.id, f.name));
+    bar.appendChild(btn);
+  });
+
+  bar.scrollLeft = bar.scrollWidth;
+}
+
+function countFolderContents(folderId) {
+  if (!window.fileData || !window.folderData) return 0;
+  const files = window.fileData.filter(f => (f.folder_id || null) === folderId);
+  const subfolders = window.folderData.filter(f => (f.parent_id || null) === folderId);
+  return files.length + subfolders.length;
+}
+
+function renderFolderCards(folders, container) {
+  const template = document.getElementById('folder-card-template');
+  if (!template) return;
+
+  folders.forEach(folder => {
+    const clone = template.content.cloneNode(true);
+    const card = clone.querySelector('.folder-card');
+
+    card.dataset.fileId = folder.id;
+    card.dataset.folderId = folder.id;
+    card.dataset.displayName = folder.display_name || 'Folder';
+    card.dataset.type = 'folder';
+
+    const nameEl = card.querySelector('.file-name');
+    nameEl.textContent = folder.display_name || 'Folder';
+
+    const metaEl = card.querySelector('.file-meta');
+    const count = countFolderContents(folder.id);
+    metaEl.textContent = `${count} item${count !== 1 ? 's' : ''}`;
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.file-menu')) return;
+      navigateToFolder(folder.id, folder.display_name || 'Folder');
+    });
+
+    container.appendChild(clone);
+  });
+}
+
 function renderFileList(files, container) {
   const renderId = ++currentRenderId;
   thumbnailQueue = [];
 
   const template = document.getElementById('file-card-template');
   const emptyState = document.getElementById('empty-state');
-  container.innerHTML = '';
 
   if (files.length === 0) {
     return;
@@ -1047,14 +1182,17 @@ async function fetchFiles() {
     if (!res.ok) throw new Error('Failed to load files');
     const data = await res.json();
 
-    window.fileData = data.files;
+    const allItems = data.files || [];
+    window.folderData = allItems.filter(f => f.type === 'folder');
+    window.fileData = allItems.filter(f => f.type !== 'folder');
+
     void reconcileThumbnailCache(window.fileData);
     void pruneThumbnailCache();
     updateSearchPlaceholder(window.fileData.length);
 
     if (loading) loading.remove();
 
-    if (window.fileData.length === 0) {
+    if (window.fileData.length === 0 && window.folderData.length === 0) {
       if (emptyState) emptyState.hidden = false;
     } else {
       window.applyFilters();
@@ -1530,6 +1668,270 @@ function setupViewToggle() {
 
 setupSettingsPopup();
 setupViewToggle();
+
+
+function setupCreateFolderModal() {
+  const modal = document.getElementById("create-folder-modal");
+  if (!modal) return;
+  const input = document.getElementById("folder-name-input");
+  const confirmBtn = document.getElementById("confirm-create-folder");
+  const cancelBtn = document.getElementById("cancel-create-folder");
+  const triggerBtn = document.getElementById("new-folder-btn");
+
+  const closeModal = () => {
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+    if (input) input.value = "";
+  };
+
+  const openModal = () => {
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    if (input) { input.value = ""; input.focus(); }
+  };
+
+  triggerBtn?.addEventListener("click", openModal);
+  cancelBtn?.addEventListener("click", closeModal);
+  modal.querySelector('[data-close]')?.addEventListener("click", closeModal);
+
+  const handleCreate = async () => {
+    const name = (input?.value || "").trim();
+    if (!name) return;
+
+    try {
+      const res = await fetch("/folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, parent_id: currentFolderId || "" }),
+      });
+      if (res.status === 401) { localStorage.removeItem('hpw'); window.location.href = '/login'; return; }
+      const data = await res.json();
+      if (!data.ok) { alert(data.error || "Failed to create folder"); return; }
+      closeModal();
+      await fetchFiles();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to create folder.");
+    }
+  };
+
+  confirmBtn?.addEventListener("click", handleCreate);
+  input?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") handleCreate();
+    if (e.key === "Escape") closeModal();
+  });
+}
+
+function setupDeleteFolderModal() {
+  const modal = document.getElementById("delete-folder-modal");
+  if (!modal) return;
+  const message = document.getElementById("delete-folder-message");
+  const confirmBtn = document.getElementById("confirm-delete-folder");
+  const cancelBtn = document.getElementById("cancel-delete-folder");
+  let pendingId = null;
+
+  const closeModal = () => {
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+    pendingId = null;
+  };
+
+  const openModal = (folderId, name) => {
+    pendingId = folderId;
+    if (message) {
+      message.textContent = `Are you sure you want to delete "${name}" and all its contents? This cannot be undone.`;
+    }
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+  };
+
+  document.addEventListener("click", (event) => {
+    if (event.target.closest(".delete-folder-btn")) {
+      const btn = event.target.closest(".delete-folder-btn");
+      const card = btn.closest(".folder-card");
+      if (!card) return;
+      openModal(card.dataset.folderId, card.dataset.displayName || "this folder");
+    }
+  });
+
+  cancelBtn?.addEventListener("click", closeModal);
+  modal.querySelector('[data-close]')?.addEventListener("click", closeModal);
+
+  const handleDelete = async () => {
+    if (!pendingId) return;
+    try {
+      const res = await fetch(`/folders/${pendingId}`, { method: "DELETE" });
+      if (!res.ok) {
+        try { const d = await res.json(); alert(d.error || "Delete failed."); }
+        catch (e) { alert("Delete failed."); }
+      } else {
+        closeModal();
+        await fetchFiles();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed.");
+    }
+  };
+
+  confirmBtn?.addEventListener("click", handleDelete);
+}
+
+function setupRenameFolderModal() {
+
+  const modal = document.getElementById("rename-modal");
+  if (!modal) return;
+  const input = document.getElementById("rename-input");
+  let pendingFolderId = null;
+
+  const closeModal = () => {
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+    pendingFolderId = null;
+    if (input) input.value = "";
+  };
+
+  document.addEventListener("click", (event) => {
+    if (event.target.closest(".rename-folder-btn")) {
+      const btn = event.target.closest(".rename-folder-btn");
+      const card = btn.closest(".folder-card");
+      if (!card) return;
+      pendingFolderId = card.dataset.folderId;
+      const name = card.dataset.displayName || "";
+      if (input) input.value = name;
+      modal.classList.add("is-open");
+      modal.setAttribute("aria-hidden", "false");
+      if (input) input.focus();
+    }
+  });
+
+  const confirmBtn = document.getElementById("confirm-rename");
+  confirmBtn?.addEventListener("click", async (e) => {
+    if (!pendingFolderId || !input) return;
+    e.stopImmediatePropagation();
+    const newName = input.value.trim();
+    if (!newName) return;
+
+    try {
+      const res = await fetch(`/folders/${pendingFolderId}/rename`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName }),
+      });
+      if (!res.ok) { alert("Rename failed."); return; }
+      closeModal();
+      const pathEntry = folderPath.find(f => f.id === pendingFolderId);
+      if (pathEntry) pathEntry.name = newName;
+      renderBreadcrumbs();
+      await fetchFiles();
+    } catch (err) {
+      console.error(err);
+      alert("Rename failed.");
+    }
+  }, true);
+}
+
+function setupMoveModal() {
+  const modal = document.getElementById("move-modal");
+  if (!modal) return;
+  const folderList = document.getElementById("move-folder-list");
+  const confirmBtn = document.getElementById("confirm-move");
+  const cancelBtn = document.getElementById("cancel-move");
+  let pendingItemId = null;
+  let pendingItemType = null;
+  let selectedTargetId = null;
+
+  const closeModal = () => {
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+    pendingItemId = null;
+    pendingItemType = null;
+    selectedTargetId = null;
+  };
+
+  const openModal = (itemId, itemType, currentParent) => {
+    pendingItemId = itemId;
+    pendingItemType = itemType;
+    selectedTargetId = null;
+
+    if (!folderList) return;
+    folderList.innerHTML = '';
+
+    const rootBtn = document.createElement('button');
+    rootBtn.className = 'move-folder-item root-item' + (!currentParent ? ' selected' : '');
+    rootBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> Root`;
+    rootBtn.addEventListener('click', () => {
+      folderList.querySelectorAll('.move-folder-item').forEach(b => b.classList.remove('selected'));
+      rootBtn.classList.add('selected');
+      selectedTargetId = null;
+    });
+    if (!currentParent) selectedTargetId = null;
+    folderList.appendChild(rootBtn);
+
+    const folders = (window.folderData || []).filter(f => f.id !== itemId);
+    folders.forEach(folder => {
+      const btn = document.createElement('button');
+      const isSelected = (folder.id === currentParent);
+      btn.className = 'move-folder-item folder-item' + (isSelected ? ' selected' : '');
+      btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> ${folder.display_name || 'Folder'}`;
+      btn.addEventListener('click', () => {
+        folderList.querySelectorAll('.move-folder-item').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedTargetId = folder.id;
+      });
+      if (isSelected) selectedTargetId = folder.id;
+      folderList.appendChild(btn);
+    });
+
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+  };
+
+  document.addEventListener("click", (event) => {
+    if (event.target.closest(".move-btn")) {
+      const btn = event.target.closest(".move-btn");
+      const card = btn.closest(".file-card");
+      if (!card) return;
+      const itemId = card.dataset.fileId || card.dataset.folderId;
+      const itemType = card.dataset.type === 'folder' ? 'folder' : 'file';
+      const currentParent = itemType === 'folder'
+        ? (window.folderData || []).find(f => f.id === itemId)?.parent_id
+        : (window.fileData || []).find(f => f.id === itemId)?.folder_id;
+      openModal(itemId, itemType, currentParent || null);
+    }
+  });
+
+  cancelBtn?.addEventListener("click", closeModal);
+  modal.querySelector('[data-close]')?.addEventListener("click", closeModal);
+
+  const handleMove = async () => {
+    if (!pendingItemId) return;
+
+    try {
+      const res = await fetch(`/files/${pendingItemId}/move`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_folder_id: selectedTargetId || "" }),
+      });
+      if (res.status === 401) { localStorage.removeItem('hpw'); window.location.href = '/login'; return; }
+      const data = await res.json();
+      if (!data.ok) { alert(data.error || "Move failed."); return; }
+      closeModal();
+      await fetchFiles();
+    } catch (err) {
+      console.error(err);
+      alert("Move failed.");
+    }
+  };
+
+  confirmBtn?.addEventListener("click", handleMove);
+}
+
+setupCreateFolderModal();
+setupDeleteFolderModal();
+setupRenameFolderModal();
+setupMoveModal();
+
 if (document.getElementById('file-list')) {
   fetchFiles();
 }

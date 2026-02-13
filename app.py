@@ -232,8 +232,9 @@ def save_metadata(items: list[dict], hpw_hex: str | None = None) -> None:
 
 
 def public_metadata(items: list[dict]) -> list[dict]:
-    safe_keys = ("id", "alias", "mime", "size", "uploaded_at", "display_name")
-    return [{key: item.get(key) for key in safe_keys} for item in items]
+    safe_keys = ("id", "alias", "mime", "size", "uploaded_at", "display_name",
+                 "type", "folder_id", "parent_id", "created_at")
+    return [{key: item.get(key) for key in safe_keys if item.get(key) is not None} for item in items]
 
 
 def resolve_download_name(meta: dict, hpw_hex: str) -> str:
@@ -264,7 +265,10 @@ def build_view_metadata(items: list[dict], hpw_hex: str) -> list[dict]:
     view_items = []
     for item in items:
         entry = dict(item)
-        entry["display_name"] = resolve_display_name(item, hpw_hex)
+        if item.get("type") == "folder":
+            entry["display_name"] = resolve_display_name(item, hpw_hex)
+        else:
+            entry["display_name"] = resolve_display_name(item, hpw_hex)
         view_items.append(entry)
     return public_metadata(view_items)
 
@@ -662,6 +666,9 @@ def upload():
             "size": plaintext_size,
             "uploaded_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         }
+        folder_id = (data.get("folder_id") or "").strip() or None
+        if folder_id:
+            meta["folder_id"] = folder_id
         if METADATA_ENCRYPTED:
             meta["original_name"] = original_name
         else:
@@ -712,12 +719,15 @@ def upload_init():
     upload_dir = UPLOAD_TMP_DIR / upload_id
     upload_dir.mkdir(parents=True, exist_ok=True)
 
+    folder_id = (data.get("folder_id") or "").strip() or None
     meta = {
         "name": original_name,
         "mime": mime_type,
         "size": plaintext_size,
         "total_chunks": total_chunks,
     }
+    if folder_id:
+        meta["folder_id"] = folder_id
     (upload_dir / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
 
     return jsonify({"ok": True, "upload_id": upload_id})
@@ -833,6 +843,9 @@ def upload_complete():
             "size": plaintext_size,
             "uploaded_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         }
+        folder_id = meta.get("folder_id") or None
+        if folder_id:
+            file_meta["folder_id"] = folder_id
         if METADATA_ENCRYPTED:
             file_meta["original_name"] = original_name
         else:
@@ -941,6 +954,156 @@ def rename_file(file_id: str):
         save_metadata(items, hpw)
     
     return jsonify({"ok": True, "name": new_full_name})
+
+
+@app.post("/folders")
+@limiter.limit("60 per minute")
+def create_folder():
+    require_unlocked()
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"ok": False, "error": "Missing data"}), 400
+
+    folder_name = (data.get("name") or "").strip()
+    if not folder_name:
+        return jsonify({"ok": False, "error": "Missing folder name"}), 400
+
+    parent_id = (data.get("parent_id") or "").strip() or None
+    hpw = session["hpw"]
+
+    folder_id = uuid.uuid4().hex
+    folder_meta = {
+        "id": folder_id,
+        "type": "folder",
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+    }
+    if parent_id:
+        folder_meta["parent_id"] = parent_id
+    if METADATA_ENCRYPTED:
+        folder_meta["original_name"] = folder_name
+    else:
+        folder_meta["name_enc"] = encrypt_text(hpw, folder_name)
+
+    with FileLock(LOCK_PATH):
+        try:
+            items = load_metadata(hpw)
+        except ValueError:
+            abort(403)
+        if parent_id:
+            parent = next((m for m in items if m.get("id") == parent_id and m.get("type") == "folder"), None)
+            if not parent:
+                return jsonify({"ok": False, "error": "Parent folder not found"}), 404
+        items.insert(0, folder_meta)
+        save_metadata(items, hpw)
+
+    return jsonify({"ok": True, "folder": public_metadata([{**folder_meta, "display_name": folder_name}])[0]})
+
+
+@app.put("/folders/<folder_id>/rename")
+def rename_folder(folder_id: str):
+    require_unlocked()
+    data = request.get_json()
+    new_name = (data.get("name") or "").strip()
+    if not new_name:
+        return jsonify({"ok": False, "error": "Missing name"}), 400
+
+    hpw = session["hpw"]
+    with FileLock(LOCK_PATH):
+        try:
+            items = load_metadata(hpw)
+        except ValueError:
+            abort(403)
+        meta = next((m for m in items if m.get("id") == folder_id and m.get("type") == "folder"), None)
+        if not meta:
+            abort(404)
+        if METADATA_ENCRYPTED:
+            meta["original_name"] = new_name
+        else:
+            meta["name_enc"] = encrypt_text(hpw, new_name)
+            if "original_name" in meta:
+                meta["original_name"] = new_name
+        save_metadata(items, hpw)
+    return jsonify({"ok": True, "name": new_name})
+
+
+@app.delete("/folders/<folder_id>")
+def delete_folder(folder_id: str):
+    require_unlocked()
+    hpw = session["hpw"]
+    with FileLock(LOCK_PATH):
+        try:
+            items = load_metadata(hpw)
+        except ValueError:
+            abort(403)
+        meta = next((m for m in items if m.get("id") == folder_id and m.get("type") == "folder"), None)
+        if not meta:
+            abort(404)
+
+        ids_to_delete = set()
+        queue = [folder_id]
+        while queue:
+            current = queue.pop()
+            ids_to_delete.add(current)
+            for item in items:
+                parent = item.get("parent_id") or item.get("folder_id")
+                if parent == current and item["id"] not in ids_to_delete:
+                    queue.append(item["id"])
+
+        for item in items:
+            if item["id"] in ids_to_delete and item.get("type") != "folder":
+                blob_path = STORAGE_DIR / f"{item['id']}.bin"
+                if blob_path.exists():
+                    try:
+                        blob_path.unlink()
+                    except OSError:
+                        pass
+
+        items = [m for m in items if m["id"] not in ids_to_delete]
+        save_metadata(items, hpw)
+    return jsonify({"ok": True})
+
+
+@app.put("/files/<item_id>/move")
+def move_item(item_id: str):
+    require_unlocked()
+    data = request.get_json()
+    target_folder_id = (data.get("target_folder_id") or "").strip() or None
+
+    hpw = session["hpw"]
+    with FileLock(LOCK_PATH):
+        try:
+            items = load_metadata(hpw)
+        except ValueError:
+            abort(403)
+        meta = next((m for m in items if m.get("id") == item_id), None)
+        if not meta:
+            abort(404)
+
+        if target_folder_id:
+            target = next((m for m in items if m.get("id") == target_folder_id and m.get("type") == "folder"), None)
+            if not target:
+                return jsonify({"ok": False, "error": "Target folder not found"}), 404
+            if meta.get("type") == "folder":
+                check = target_folder_id
+                while check:
+                    if check == item_id:
+                        return jsonify({"ok": False, "error": "Cannot move folder into itself"}), 400
+                    parent_item = next((m for m in items if m.get("id") == check), None)
+                    check = (parent_item.get("parent_id") if parent_item else None)
+
+        if meta.get("type") == "folder":
+            if target_folder_id:
+                meta["parent_id"] = target_folder_id
+            else:
+                meta.pop("parent_id", None)
+        else:
+            if target_folder_id:
+                meta["folder_id"] = target_folder_id
+            else:
+                meta.pop("folder_id", None)
+
+        save_metadata(items, hpw)
+    return jsonify({"ok": True})
 
 
 @app.post("/settings")
